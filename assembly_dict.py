@@ -29,13 +29,14 @@ def extraire_kmers_genome(genome, k):
     return kmers
 
 
-def stock_kmers_dict(kmers):
+def stock_kmers_dict(kmers, threshold):
     kmer_dict = {}
     for kmer in kmers:
         if kmer in kmer_dict:
             kmer_dict[kmer] += 1
         else:
             kmer_dict[kmer] = 1
+    kmer_dict = {k: v for k, v in kmer_dict.items() if v > threshold}
     return kmer_dict
 
 
@@ -78,7 +79,7 @@ def main():
     genome = lire_genome_fasta(fichier_fasta)
     k = 25
     kmers = extraire_kmers_genome(genome, k)
-    kmer_dict = stock_kmers_dict(kmers)
+    kmer_dict = stock_kmers_dict(kmers, 2)
     print(kmer_dict)
     assembly = de_Bruijn_graph(kmer_dict)
     print("Assemblage de Bruijn :")
