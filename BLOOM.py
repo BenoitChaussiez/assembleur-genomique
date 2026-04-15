@@ -1,121 +1,275 @@
 import hashlib
 import time
 import sys
+import mmh3
+import random
+from bitarray import bitarray
 
 class BloomFilter:
     def __init__(self, size, hash_count):
         self.size = size
         self.hash_count = hash_count
-        # Utiliser bytearray au lieu de list pour économiser la mémoire
-        self.bit_array = bytearray(size)
+        self.bit_array = bitarray(size)
+        self.bit_array.setall(0)
 
     def _hashes(self, item):
-        # Utiliser SHA256 pour meilleure distribution
-        h = int(hashlib.sha256(item.encode()).hexdigest(), 16)
+        """Génère les indices en utilisant hash64 pour une meilleure distribution"""
+        hash1, hash2 = mmh3.hash64(item, seed=0)
+        
         for i in range(self.hash_count):
-            yield (h + i * 0x9e3779b97f4a7c15) % self.size
+            idx = (hash1 + i * hash2) % self.size
+            yield idx
 
     def add(self, item):
         for idx in self._hashes(item):
             self.bit_array[idx] = 1
-
+    
     def check(self, item):
         return all(self.bit_array[idx] for idx in self._hashes(item))
-
+    
 
 def compter_lignes(fichier):
     """Compte rapidement le nombre de lignes dans un fichier."""
     with open(fichier, 'r') as f:
         return sum(1 for _ in f)
-
-
-def comparer_fichiers(fichier1, fichier2, taille_filtre=500_000_000, nb_hash=7):
-    """
-    Compare deux fichiers de kmers.
-    """
-    print("="*60)
-    print("COMPARAISON DE FICHIERS DE KMERS")
-    print("="*60)
     
-    print("\nAnalyse des fichiers...")
-    n1 = compter_lignes(fichier1)
-    n2 = compter_lignes(fichier2)
-    print(f"Fichier 1 : {fichier1} ({n1:,} kmers)")
-    print(f"Fichier 2 : {fichier2} ({n2:,} kmers)")
+
+def extension_gauche(max_iterations, kmer_initial, bf):
+    """Extension vers la droite avec choix du meilleur chemin quand il y a des branches"""
     
-    print(f"\nInitialisation du filtre de Bloom (taille: {taille_filtre:,}, hash: {nb_hash})...")
+    kmer_actuel = kmer_initial
+    sequence_ajoutee_gauche = ""
+    iteration = 0
+    bf_verif_gauche=BloomFilter(size=800_000_000, hash_count=7)
+    while iteration < max_iterations:
+        base = kmer_actuel[:-1]
+        candidats_gauche = {
+            'A': 'A' + base ,
+            'T': 'T' + base ,
+            'C': 'C' + base,
+            'G': 'G' + base 
+        }
+        
+        candidats_valides = []
+        for nuc, kmer_test in candidats_gauche.items():
+            if bf.check(kmer_test) and not bf_verif_gauche.check(kmer_test):
+                candidats_valides.append((nuc, kmer_test))
+        
+        if not candidats_valides:
+            print(f'Arrêt gauche: aucun nouveau kmer à iteration {iteration}')
+            break
+
+        if len(candidats_valides) > 1:
+            meilleur_nuc = None
+            meilleur_score = -1
+            
+            for nuc, kmer_test in candidats_valides:
+                base_suivante = kmer_test[:-1]
+                candidats_suivants = {
+                    'A': 'A' + base_suivante ,
+                    'T': 'T' + base_suivante ,
+                    'C': 'C' + base_suivante ,
+                    'G': 'G' + base_suivante 
+                }
+                nb_choix_suivants = sum(1 for k in candidats_suivants.values() if bf.check(k))
+                
+                if nb_choix_suivants > meilleur_score:
+                    meilleur_score = nb_choix_suivants
+                    meilleur_nuc = nuc
+            
+            nuc_choisi = meilleur_nuc
+        else:
+            nuc_choisi = candidats_valides[0][0]
+        
+        kmer_actuel = candidats_gauche[nuc_choisi]
+        bf_verif_gauche.add(kmer_actuel)
+        sequence_ajoutee_gauche = nuc_choisi + sequence_ajoutee_gauche
+        iteration += 1
+    
+    return sequence_ajoutee_gauche
+    
+def extension_droite(max_iterations, kmer_initial, bf):
+    """Extension vers la droite avec choix du meilleur chemin quand il y a des branches"""
+    
+    kmer_actuel = kmer_initial
+    sequence_ajoutee_droite = ""
+    iteration = 0
+    bf_verif_droite=BloomFilter(size=800_000_000, hash_count=7)
+    while iteration < max_iterations:
+        base = kmer_actuel[1:]
+        candidats_droite = {
+            'A': base + 'A',
+            'T': base + 'T',
+            'C': base + 'C',
+            'G': base + 'G'
+        }
+        
+        candidats_valides = []
+        for nuc, kmer_test in candidats_droite.items():
+            if bf.check(kmer_test) and not bf_verif_droite.check(kmer_test):
+                candidats_valides.append((nuc, kmer_test))
+        
+        if not candidats_valides:
+            print(f'Arrêt droite: aucun nouveau kmer à iteration {iteration}')
+            break
+
+        for nuc, kmer_test in candidats_valides:
+            if bf_verif_droite.check(kmer_test)==True:
+                break
+        if len(candidats_valides) > 1:
+            meilleur_nuc = None
+            meilleur_score = -1
+            
+            for nuc, kmer_test in candidats_valides:
+                base_suivante = kmer_test[1:]
+                candidats_suivants = {
+                    'A': base_suivante + 'A',
+                    'T': base_suivante + 'T',
+                    'C': base_suivante + 'C',
+                    'G': base_suivante + 'G'
+                }
+                nb_choix_suivants = sum(1 for k in candidats_suivants.values() if bf.check(k))
+                
+                if nb_choix_suivants > meilleur_score:
+                    meilleur_score = nb_choix_suivants
+                    meilleur_nuc = nuc
+            
+            nuc_choisi = meilleur_nuc
+        else:
+            nuc_choisi = candidats_valides[0][0]
+        
+        kmer_actuel = candidats_droite[nuc_choisi]
+        bf_verif_droite.add(kmer_actuel)
+        sequence_ajoutee_droite += nuc_choisi
+        iteration += 1
+    
+    return sequence_ajoutee_droite
+
+def fusionner_contigs(contigs, k=30):
+    """Fusionne les contigs qui se chevauchent"""
+    
+    contigs_tries = sorted(contigs, key=len, reverse=True)
+    fusionnes = []
+    
+    for contig in contigs_tries:
+        ajoute = False
+        for i, existing in enumerate(fusionnes):
+            if contig in existing:
+                ajoute = True
+                break
+            
+            if existing in contig:
+                fusionnes[i] = contig
+                ajoute = True
+                break
+            
+            for overlap in range(min(k, len(contig)), 10, -1):
+                if existing.endswith(contig[:overlap]):
+                    fusionnes[i] = existing + contig[overlap:]
+                    ajoute = True
+                    break
+                elif contig.endswith(existing[:overlap]):
+                    fusionnes[i] = contig + existing[overlap:]
+                    ajoute = True
+                    break
+            
+            if ajoute:
+                break
+        
+        if not ajoute:
+            fusionnes.append(contig)
+    
+    return fusionnes
+    
+def construction_BLOOM(fichier1, taille_filtre=0, nb_hash=7, nb_essai=100):
+    compte = compter_lignes(fichier1)
+    taille_filtre = 800_000_000
+    start = time.time()
+    
     bf = BloomFilter(size=taille_filtre, hash_count=nb_hash)
-    table = set()
-    
-    print(f"\nChargement de {fichier1}...")
-    start_load = time.time()
-    
-    with open(fichier1, 'r') as f:
-        for i, line in enumerate(f):
-            kmer = line.strip()
-            if kmer:
-                bf.add(kmer)
-                table.add(kmer)
-            
-            if i > 0 and i % 2_000_000 == 0:
-                elapsed = time.time() - start_load
-                print(f"  {i:,} kmers chargés ({elapsed:.1f}s)")
-    
-    end_load = time.time()
-    print(f" {len(table):,} kmers uniques chargés en {end_load - start_load:.2f}s")
-    
-    print(f"\nRecherche dans {fichier2}...")
-    commons = []
-    start_search = time.time()
-    
-    with open(fichier2, 'r') as f:
-        for i, line in enumerate(f):
-            kmer = line.strip()
-            if not kmer:
-                continue
-            
-            if bf.check(kmer) and kmer in table:
-                commons.append(kmer)
-            
-            if i > 0 and i % 2_000_000 == 0:
-                elapsed = time.time() - start_search
-                print(f"  {i:,} kmers analysés... {len(commons):,} trouvés ({elapsed:.1f}s)")
-    
-    end_search = time.time()
-    
-    print("\n" + "="*60)
-    print("RÉSULTATS FINAUX")
-    print("="*60)
-    print(f" {fichier1} : {len(table):,} kmers uniques")
-    print(f" {fichier2} : {n2:,} kmers")
-    print(f" Kmers communs : {len(commons):,}")
-    
-    if len(commons) > 0:
-        pourcentage = (len(commons) / min(len(table), n2)) * 100
-        print(f" Pourcentage : {pourcentage:.2f}% du plus petit fichier")
-    
-    print(f"\n Temps de chargement : {end_load - start_load:.2f}s")
-    print(f" Temps de recherche : {end_search - start_search:.2f}s")
-    print(f"  Temps total : {end_search - start_load:.2f}s")
-    
-    if len(commons) > 0:
-        print(f"\n 10 premiers kmers communs :")
-        for i, kmer in enumerate(commons[:10]):
-            print(f"   {i+1}. {kmer}")
-    
-    return commons
+    bf2 = BloomFilter(size=taille_filtre, hash_count=nb_hash)
+    bf3 = BloomFilter(size=taille_filtre, hash_count=nb_hash)
+    bf4 = BloomFilter(size=taille_filtre, hash_count=nb_hash)
+    bf5 = BloomFilter(size=taille_filtre, hash_count=nb_hash)
+    bf6 = BloomFilter(size=taille_filtre, hash_count=nb_hash)
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python kmer.py <fichier_kmers1> <fichier_kmers2>")
-        print("Exemple: python kmer.py fichier1.fa fichier2.fa")
-        sys.exit(1)
+    with open(fichier1, 'r') as f:
+        tous_les_kmers = [line.strip() for line in f]
+        print(f"Nombre total de k-mers: {len(tous_les_kmers)}")
+        
+        for kmer in tous_les_kmers:
+            if bf.check(kmer):
+                if bf2.check(kmer):
+                    if bf3.check(kmer):
+                        if bf4.check(kmer):
+                            if bf5.check(kmer):
+                                bf6.add(kmer)  
+                            else:
+                                bf5.add(kmer)  
+                        else:
+                            bf4.add(kmer)  
+                    else:
+                        bf3.add(kmer)  
+                else:
+                    bf2.add(kmer)  
+            else:
+                bf.add(kmer)  
+
+    del (bf, bf2, bf3, bf4, bf5)
     
-    try:
-        communs = comparer_fichiers(sys.argv[1], sys.argv[2])
-    except FileNotFoundError as e:
-        print(f" Erreur: Fichier non trouvé - {e}")
-    except MemoryError:
-        print("Erreur: Mémoire insuffisante. Essayez de réduire la taille du filtre.")
-    except Exception as e:
-        print(f" Erreur inattendue: {e}")
+
+    seeds_utilisees = set()  
+    tous_les_contigs = []
+    
+    for essai in range(nb_essai):
+
+        kmer_aleatoire = None
+        max_tentatives = 100
+        for _ in range(max_tentatives):
+            candidat = random.choice(tous_les_kmers)
+            if bf6.check(candidat) and candidat not in seeds_utilisees:
+                kmer_aleatoire = candidat
+                break
+        
+        if kmer_aleatoire is None:
+            break
+        
+        seeds_utilisees.add(kmer_aleatoire) 
+        
+
+        sequence_droite = extension_droite(compte, kmer_aleatoire, bf6)
+        sequence_gauche = extension_gauche(compte, kmer_aleatoire, bf6)
+        
+        contig = sequence_gauche + kmer_aleatoire + sequence_droite
+        
+        if len(contig) > 100:
+            tous_les_contigs.append(contig)
+
+    
+
+    contigs = tous_les_contigs
+    for passe in range(3):
+        contigs = fusionner_contigs(contigs, k=30)
+
+    
+
+    with open('fichier_sortie.fasta', 'w') as f_out:
+        f_out.write(f">genome_avec_k={25}\n") 
+        for contig in contigs:
+            for j in range(0, len(contig), 80):
+                f_out.write(contig[j:j+80] + "\n")
+    
+    taille_totale = sum(len(c) for c in contigs)
+    print(f"Nombre de contigs: {len(contigs)}")
+    print(f"Taille totale: {taille_totale} pb")
+    
+    if len(contigs) > 0:
+        print(f"Contig max: {max(len(c) for c in contigs)} pb")
+        print(f"N50: à calculer")
+    
+    end = time.time()
+    print(f"TEMPS: {end-start:.2f} secondes")
+    
+    return contigs
+
+construction_BLOOM('level06/kmer_30.fasta', nb_essai=10)
