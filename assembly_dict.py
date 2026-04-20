@@ -55,7 +55,7 @@ def predecessors(kmer, kmer_dict):
             return candidate
     return None
 
-def de_Bruijn_graph(kmer_dict):
+def Extension(kmer_dict):
     """Construit un contig à partir des k-mers restants et les consomme."""
     if not kmer_dict:
         return None
@@ -63,32 +63,32 @@ def de_Bruijn_graph(kmer_dict):
     first_kmer = random.choice(list(kmer_dict.keys()))
     del kmer_dict[first_kmer]  # consomme le k-mer de départ
 
-    assembly = first_kmer
+    extension = first_kmer
 
     # extension vers l’avant
     next_kmer = sucessor(first_kmer, kmer_dict)
     while next_kmer:
-        assembly += next_kmer[-1]
+        extension += next_kmer[-1]
         next_kmer = sucessor(next_kmer, kmer_dict)
 
     # extension vers l’arrière
     prev_kmer = predecessors(first_kmer, kmer_dict)
     while prev_kmer:
-        assembly = prev_kmer[0] + assembly
+        extension = prev_kmer[0] + extension
         prev_kmer = predecessors(prev_kmer, kmer_dict)
 
-    return assembly
+    return extension
 
 def main():
     fichier_fasta = "./data/level00/reads.fasta.gz"
     genome = lire_genome_fasta(fichier_fasta)
-    k = 25
+    k = 50
     kmers = extraire_kmers_genome(genome, k)
-    kmer_dict = stock_kmers_dict(kmers, threshold=4)
+    kmer_dict = stock_kmers_dict(kmers, threshold=0)
 
     contigs = []
     while kmer_dict:
-        contig = de_Bruijn_graph(kmer_dict)
+        contig = Extension(kmer_dict)
         if contig:
             contigs.append(contig)
 
