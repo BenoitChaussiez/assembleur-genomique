@@ -12,8 +12,8 @@ Paramètres a renseigner :
 -k = Taille des k-mers (défaut: 31).
 -t = Seuil d'abondance pour filtrer le bruit (défaut: 5).
 -d = Profondeur de recherche (lookahead) (défaut: 50).
--s = Taille cible max de l'assemblage en bp (défaut: 1500000).")
--m = Longueur minimum des contigs à sauvegarder (défaut: 5000).")
+-s = Taille cible max de l'assemblage en bp (défaut: 1500000).
+-m = Longueur minimum des contigs à sauvegarder (défaut: 5000).
 
 Exemple de ligne de commande : 
 python3 assembler_dict.py -l 6 -k 31 -t 6 -d 50 -s 2000000 -m 15000
