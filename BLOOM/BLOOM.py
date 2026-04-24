@@ -5,6 +5,32 @@ import mmh3
 import random
 from bitarray import bitarray
 
+
+
+
+def extraire_kmers_25(fichier_entree, fichier_sortie, k=30):
+
+    with open(fichier_entree, "r") as f_in, open(fichier_sortie, "w") as f_out:
+        
+        sequence = ""
+
+        for line in f_in:
+            line = line.strip()
+
+            if line.startswith(">"):
+                if sequence:
+                    for i in range(len(sequence) - k + 1):
+                        kmer = sequence[i:i+k]
+                        f_out.write(kmer + "\n")
+                sequence = ""
+            else:
+                sequence += line
+
+        if sequence:
+            for i in range(len(sequence) - k + 1):
+                kmer = sequence[i:i+k]
+                f_out.write(kmer + "\n")
+
 class BloomFilter:
     def __init__(self, size, hash_count):
         self.size = size
@@ -60,24 +86,15 @@ def extension_gauche(max_iterations, kmer_initial, bf):
             break
 
         if len(candidats_valides) > 1:
-            meilleur_nuc = None
-            meilleur_score = -1
-            
+            scores = []
             for nuc, kmer_test in candidats_valides:
-                base_suivante = kmer_test[:-1]
-                candidats_suivants = {
-                    'A': 'A' + base_suivante ,
-                    'T': 'T' + base_suivante ,
-                    'C': 'C' + base_suivante ,
-                    'G': 'G' + base_suivante 
-                }
-                nb_choix_suivants = sum(1 for k in candidats_suivants.values() if bf.check(k))
-                
-                if nb_choix_suivants > meilleur_score:
-                    meilleur_score = nb_choix_suivants
-                    meilleur_nuc = nuc
+                base_suivante = kmer_test[1:]
+                score = sum(1 for n in 'ATCG' if bf.check(base_suivante + n))
+                scores.append(score)
             
-            nuc_choisi = meilleur_nuc
+            meilleur_score = max(scores)
+            meilleurs = [candidats_valides[i][0] for i, s in enumerate(scores) if s == meilleur_score]
+            nuc_choisi = random.choice(meilleurs)
         else:
             nuc_choisi = candidats_valides[0][0]
         
@@ -90,7 +107,6 @@ def extension_gauche(max_iterations, kmer_initial, bf):
     
 def extension_droite(max_iterations, kmer_initial, bf):
     """Extension vers la droite avec choix du meilleur chemin quand il y a des branches"""
-    
     kmer_actuel = kmer_initial
     sequence_ajoutee_droite = ""
     iteration = 0
@@ -113,28 +129,16 @@ def extension_droite(max_iterations, kmer_initial, bf):
             print(f'Arrêt droite: aucun nouveau kmer à iteration {iteration}')
             break
 
-        for nuc, kmer_test in candidats_valides:
-            if bf_verif_droite.check(kmer_test)==True:
-                break
         if len(candidats_valides) > 1:
-            meilleur_nuc = None
-            meilleur_score = -1
-            
+            scores = []
             for nuc, kmer_test in candidats_valides:
                 base_suivante = kmer_test[1:]
-                candidats_suivants = {
-                    'A': base_suivante + 'A',
-                    'T': base_suivante + 'T',
-                    'C': base_suivante + 'C',
-                    'G': base_suivante + 'G'
-                }
-                nb_choix_suivants = sum(1 for k in candidats_suivants.values() if bf.check(k))
-                
-                if nb_choix_suivants > meilleur_score:
-                    meilleur_score = nb_choix_suivants
-                    meilleur_nuc = nuc
+                score = sum(1 for n in 'ATCG' if bf.check(base_suivante + n))
+                scores.append(score)
             
-            nuc_choisi = meilleur_nuc
+            meilleur_score = max(scores)
+            meilleurs = [candidats_valides[i][0] for i, s in enumerate(scores) if s == meilleur_score]
+            nuc_choisi = random.choice(meilleurs)
         else:
             nuc_choisi = candidats_valides[0][0]
         
@@ -163,7 +167,7 @@ def fusionner_contigs(contigs, k=30):
                 ajoute = True
                 break
             
-            for overlap in range(min(k, len(contig)), 10, -1):
+            for overlap in range(min(k, len(contig)), 20, -1):
                 if existing.endswith(contig[:overlap]):
                     fusionnes[i] = existing + contig[overlap:]
                     ajoute = True
@@ -181,9 +185,11 @@ def fusionner_contigs(contigs, k=30):
     
     return fusionnes
     
-def construction_BLOOM(fichier1, taille_filtre=0, nb_hash=7, nb_essai=100):
+def construction_BLOOM(fichier1,nb_essai, taille_filtre=0, nb_hash=7):
+
+
     compte = compter_lignes(fichier1)
-    taille_filtre = 800_000_000
+    taille_filtre = 1_400_000_000
     start = time.time()
     
     bf = BloomFilter(size=taille_filtre, hash_count=nb_hash)
@@ -192,7 +198,6 @@ def construction_BLOOM(fichier1, taille_filtre=0, nb_hash=7, nb_essai=100):
     bf4 = BloomFilter(size=taille_filtre, hash_count=nb_hash)
     bf5 = BloomFilter(size=taille_filtre, hash_count=nb_hash)
     bf6 = BloomFilter(size=taille_filtre, hash_count=nb_hash)
-
     with open(fichier1, 'r') as f:
         tous_les_kmers = [line.strip() for line in f]
         print(f"Nombre total de k-mers: {len(tous_les_kmers)}")
@@ -203,7 +208,7 @@ def construction_BLOOM(fichier1, taille_filtre=0, nb_hash=7, nb_essai=100):
                     if bf3.check(kmer):
                         if bf4.check(kmer):
                             if bf5.check(kmer):
-                                bf6.add(kmer)  
+                                bf6.add(kmer)
                             else:
                                 bf5.add(kmer)  
                         else:
@@ -242,7 +247,7 @@ def construction_BLOOM(fichier1, taille_filtre=0, nb_hash=7, nb_essai=100):
         
         contig = sequence_gauche + kmer_aleatoire + sequence_droite
         
-        if len(contig) > 100:
+        if len(contig) >= 5000:
             tous_les_contigs.append(contig)
 
     
@@ -254,8 +259,8 @@ def construction_BLOOM(fichier1, taille_filtre=0, nb_hash=7, nb_essai=100):
     
 
     with open('fichier_sortie.fasta', 'w') as f_out:
-        f_out.write(f">genome_avec_k={25}\n") 
-        for contig in contigs:
+        for i, contig in enumerate(contigs):
+            f_out.write(f">contig_{i}_k=30\n")
             for j in range(0, len(contig), 80):
                 f_out.write(contig[j:j+80] + "\n")
     
@@ -265,11 +270,8 @@ def construction_BLOOM(fichier1, taille_filtre=0, nb_hash=7, nb_essai=100):
     
     if len(contigs) > 0:
         print(f"Contig max: {max(len(c) for c in contigs)} pb")
-        print(f"N50: à calculer")
     
     end = time.time()
-    print(f"TEMPS: {end-start:.2f} secondes")
+    print(f"TEMPS construction contig: {end-start:.2f} secondes")
     
     return contigs
-
-construction_BLOOM('level06/kmer_30.fasta', nb_essai=10)
