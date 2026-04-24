@@ -24,10 +24,11 @@ BLOOM.py #Fonction de Bloom Filter , Extension gauche et droite , fusion des con
 decoupage.py #Fonction de decoupe des fichiers de reads pour le transformer en fichier avec des k-mers
 main.py #Fonction d'affichage qui renvoie les resultats dans un fichier
 
-Fichier du /srcBloom:
+Fichier du /Bloom:
 decoupage.py
 mains.py
 BLOOM.py 
+parser.py
 
 Parser :
 -r fichier de reads
