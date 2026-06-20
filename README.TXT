@@ -1,4 +1,14 @@
-Partie Paul Dictionnaire 
+Assembleur génomique : Dictionnaire vs Filtre de Bloom
+
+Ce projet, réalisé dans le cadre du Master MISO à l'Université de Lille, compare deux approches pour l'assemblage génomique à partir de reads :
+
+1. Approche par dictionnaire : utilisation d'une table de hachage (dictionnaire Python) pour stocker et manipuler les k-mers.
+2. Approche par filtre de Bloom : utilisation d'une cascade de filtres de Bloom pour un stockage mémoire optimisé.
+
+L'objectif est de comprendre les avantages et les limites de chaque méthode en termes de performances, d'utilisation mémoire et de qualité d'assemblage.
+
+
+Partie Paul Lemmonier Dictionnaire 
 
 Description:
 Ce programme permet de faire l'assemblage d'un génome à partir de reads en utilisant un dictionnaire comme structure de données
@@ -8,7 +18,7 @@ il est nécessaire d'avoir installer le dossier data contenant les différents n
 Fichier : assembleur_dict.py
 
 Paramètres a renseigner : 
--l = Niveau du dataset à assembler (0 à 10).
+-l = Niveau du dataset à assembler (0 à 10) Obligatoire.
 -k = Taille des k-mers (défaut: 31).
 -t = Seuil d'abondance pour filtrer le bruit (défaut: 5).
 -d = Profondeur de recherche (lookahead) (défaut: 50).
@@ -18,7 +28,7 @@ Paramètres a renseigner :
 Exemple de ligne de commande : 
 python3 assembler_dict.py -l 6 -k 31 -t 6 -d 50 -s 2000000 -m 15000
 
-Partie Benoit Filtre de Bloom
+Partie Benoit Chaussiez Filtre de Bloom
 
 Prerequis: 
 mmh3
@@ -56,3 +66,5 @@ Parser :
 
 Exemple de ligne de commande : 
 python3 mains.py -r reads.fasta -o kmer_30.fasta -k 30 -t 50
+
+Projet réalisé dans le cadre du Master MISO - Méthodes Informatiques et Statistiques pour les Systèmes Omics - Université de Lille, Année 2025-2026.
